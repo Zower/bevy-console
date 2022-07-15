@@ -17,6 +17,8 @@ pub use crate::console::{
 };
 pub use crate::value::{FromValue, FromValueError, ValueType};
 
+pub use bevy_egui::*;
+
 mod commands;
 mod console;
 mod macros;

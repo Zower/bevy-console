@@ -8,11 +8,11 @@ use bevy::ecs::{
 };
 use bevy::{input::keyboard::KeyboardInput, prelude::*};
 use bevy_console_parser::{parse_console_command, ValueRawOwned};
-use bevy_egui::egui::epaint::text::cursor::CCursor;
 use bevy_egui::egui::text_edit::CCursorRange;
+use bevy_egui::egui::{epaint::text::cursor::CCursor, WidgetText};
 use bevy_egui::egui::{Context, Id};
 use bevy_egui::{
-    egui::{self, Align, RichText, ScrollArea, TextEdit},
+    egui::{self, Align, ScrollArea, TextEdit},
     EguiContext,
 };
 use std::collections::{BTreeMap, VecDeque};
@@ -273,26 +273,23 @@ impl<'w, 's, T> ConsoleCommand<'w, 's, T> {
     /// Print a reply in the console.
     ///
     /// See [`reply!`](crate::reply) for usage with the [`format!`] syntax.
-    pub fn reply(&mut self, msg: impl Into<String>) {
-        self.console_line
-            .send(PrintConsoleLine::new(msg.into().into()));
+    pub fn reply(&mut self, msg: impl Into<WidgetText>) {
+        self.console_line.send(PrintConsoleLine::new(msg.into()));
     }
 
     /// Print a reply in the console followed by `[ok]`.
     ///
     /// See [`reply_ok!`](crate::reply_ok) for usage with the [`format!`] syntax.
-    pub fn reply_ok(&mut self, msg: impl Into<String>) {
-        self.console_line
-            .send(PrintConsoleLine::new(msg.into().into()));
+    pub fn reply_ok(&mut self, msg: impl Into<WidgetText>) {
+        self.console_line.send(PrintConsoleLine::new(msg.into()));
         self.ok();
     }
 
     /// Print a reply in the console followed by `[failed]`.
     ///
     /// See [`reply_failed!`](crate::reply_failed) for usage with the [`format!`] syntax.
-    pub fn reply_failed(&mut self, msg: impl Into<String>) {
-        self.console_line
-            .send(PrintConsoleLine::new(msg.into().into()));
+    pub fn reply_failed(&mut self, msg: impl Into<WidgetText>) {
+        self.console_line.send(PrintConsoleLine::new(msg.into()));
         self.failed();
     }
 }
@@ -386,15 +383,15 @@ pub struct ConsoleCommandEntered {
 }
 
 /// Events to print to the console.
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub struct PrintConsoleLine {
     /// Console line
-    pub line: RichText,
+    pub line: WidgetText,
 }
 
 impl PrintConsoleLine {
     /// Creates a new console line to print.
-    pub const fn new(line: RichText) -> Self {
+    pub const fn new(line: WidgetText) -> Self {
         Self { line }
     }
 }
@@ -506,7 +503,7 @@ pub struct ConsoleOpen {
 
 pub(crate) struct ConsoleState {
     pub(crate) buf: String,
-    pub(crate) scrollback: VecDeque<RichText>,
+    pub(crate) scrollback: VecDeque<WidgetText>,
     pub(crate) history: VecDeque<String>,
     pub(crate) history_index: usize,
 }

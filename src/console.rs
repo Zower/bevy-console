@@ -261,27 +261,29 @@ impl<'w, 's, T> ConsoleCommand<'w, 's, T> {
     /// Print `[ok]` in the console.
     pub fn ok(&mut self) {
         self.console_line
-            .send(PrintConsoleLine::new("[ok]".to_string()));
+            .send(PrintConsoleLine::new("[ok]".to_string().into()));
     }
 
     /// Print `[failed]` in the console.
     pub fn failed(&mut self) {
         self.console_line
-            .send(PrintConsoleLine::new("[failed]".to_string()));
+            .send(PrintConsoleLine::new("[failed]".to_string().into()));
     }
 
     /// Print a reply in the console.
     ///
     /// See [`reply!`](crate::reply) for usage with the [`format!`] syntax.
     pub fn reply(&mut self, msg: impl Into<String>) {
-        self.console_line.send(PrintConsoleLine::new(msg.into()));
+        self.console_line
+            .send(PrintConsoleLine::new(msg.into().into()));
     }
 
     /// Print a reply in the console followed by `[ok]`.
     ///
     /// See [`reply_ok!`](crate::reply_ok) for usage with the [`format!`] syntax.
     pub fn reply_ok(&mut self, msg: impl Into<String>) {
-        self.console_line.send(PrintConsoleLine::new(msg.into()));
+        self.console_line
+            .send(PrintConsoleLine::new(msg.into().into()));
         self.ok();
     }
 
@@ -289,7 +291,8 @@ impl<'w, 's, T> ConsoleCommand<'w, 's, T> {
     ///
     /// See [`reply_failed!`](crate::reply_failed) for usage with the [`format!`] syntax.
     pub fn reply_failed(&mut self, msg: impl Into<String>) {
-        self.console_line.send(PrintConsoleLine::new(msg.into()));
+        self.console_line
+            .send(PrintConsoleLine::new(msg.into().into()));
         self.failed();
     }
 }
@@ -350,13 +353,14 @@ impl<'w, 's, T: Resource + CommandName + CommandArgs + CommandHelp> SystemParamF
             .and_then(|result| match result {
                 Ok(value) => Some(value),
                 Err(err) => {
-                    console_line.send(PrintConsoleLine::new(err.to_string()));
+                    console_line.send(PrintConsoleLine::new(err.to_string().into()));
                     match err {
                         FromValueError::UnexpectedArgType { .. }
                         | FromValueError::NotEnoughArgs
                         | FromValueError::Custom(_) => {
                             if let Some(help_text) = T::command_help() {
-                                console_line.send(PrintConsoleLine::new(help_text.help_text()));
+                                console_line
+                                    .send(PrintConsoleLine::new(help_text.help_text().into()));
                             }
                         }
                         FromValueError::ValueTooLarge { .. } => {}
@@ -382,15 +386,15 @@ pub struct ConsoleCommandEntered {
 }
 
 /// Events to print to the console.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct PrintConsoleLine {
     /// Console line
-    pub line: String,
+    pub line: RichText,
 }
 
 impl PrintConsoleLine {
     /// Creates a new console line to print.
-    pub const fn new(line: String) -> Self {
+    pub const fn new(line: RichText) -> Self {
         Self { line }
     }
 }
@@ -421,6 +425,8 @@ pub struct ConsoleConfiguration {
     pub commands: BTreeMap<&'static str, Option<CommandInfo>>,
     /// Number of commands to store in history
     pub history_size: usize,
+    /// Number of lines to store in the scrollback
+    pub scrollback_size: usize,
 }
 
 impl Default for ConsoleConfiguration {
@@ -433,6 +439,7 @@ impl Default for ConsoleConfiguration {
             width: 800.0,
             commands: BTreeMap::new(),
             history_size: 20,
+            scrollback_size: 2000,
         }
     }
 }
@@ -499,7 +506,7 @@ pub struct ConsoleOpen {
 
 pub(crate) struct ConsoleState {
     pub(crate) buf: String,
-    pub(crate) scrollback: Vec<String>,
+    pub(crate) scrollback: VecDeque<RichText>,
     pub(crate) history: VecDeque<String>,
     pub(crate) history_index: usize,
 }
@@ -508,7 +515,7 @@ impl Default for ConsoleState {
     fn default() -> Self {
         ConsoleState {
             buf: String::default(),
-            scrollback: Vec::new(),
+            scrollback: VecDeque::new(),
             history: VecDeque::from([String::new()]),
             history_index: 0,
         }
@@ -548,7 +555,7 @@ pub(crate) fn console_ui(
                         .show(ui, |ui| {
                             ui.vertical(|ui| {
                                 for line in &state.scrollback {
-                                    ui.label(RichText::new(line).monospace());
+                                    ui.label(line.clone().monospace());
                                 }
                             });
 
@@ -571,10 +578,16 @@ pub(crate) fn console_ui(
                     let text_edit_response = ui.add(text_edit);
                     if text_edit_response.lost_focus() && ui.input().key_pressed(egui::Key::Enter) {
                         if state.buf.trim().is_empty() {
-                            state.scrollback.push(String::new());
+                            state.scrollback.push_back(String::new().into());
+                            if state.scrollback.len() > config.scrollback_size {
+                                state.scrollback.pop_front();
+                            }
                         } else {
                             let msg = format!("$ {}", state.buf);
-                            state.scrollback.push(msg);
+                            state.scrollback.push_back(msg.into());
+                            if state.scrollback.len() > config.scrollback_size {
+                                state.scrollback.pop_front();
+                            }
                             let cmd_string = state.buf.clone();
                             state.history.insert(1, cmd_string);
                             if state.history.len() > config.history_size + 1 {
@@ -597,7 +610,11 @@ pub(crate) fn console_ui(
                                 Err(_) => {
                                     state
                                         .scrollback
-                                        .push("[error] invalid argument(s)".to_string());
+                                        .push_back("[error] invalid argument(s)".into());
+
+                                    if state.scrollback.len() > config.scrollback_size {
+                                        state.scrollback.pop_front();
+                                    }
                                 }
                             }
 
@@ -644,7 +661,7 @@ pub(crate) fn receive_console_line(
 ) {
     for event in events.iter() {
         let event: &PrintConsoleLine = event;
-        console_state.scrollback.push(event.line.clone());
+        console_state.scrollback.push_back(event.line.clone());
     }
 }
 

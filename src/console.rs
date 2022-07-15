@@ -658,10 +658,14 @@ pub(crate) fn console_ui(
 pub(crate) fn receive_console_line(
     mut console_state: ResMut<ConsoleState>,
     mut events: EventReader<PrintConsoleLine>,
+    config: Res<ConsoleConfiguration>,
 ) {
     for event in events.iter() {
         let event: &PrintConsoleLine = event;
         console_state.scrollback.push_back(event.line.clone());
+        if console_state.scrollback.len() > config.scrollback_size {
+            console_state.scrollback.pop_front();
+        }
     }
 }
 
